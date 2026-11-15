@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+websockets
+cryptography
+rapidfuzz
+tldextract
+pytest
+httpx

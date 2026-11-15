@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PhishGuard</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --line: #2a313c; --text: #e6edf3; --muted: #8b949e;
+    --accent: #58a6ff; --high: #f85149; --medium: #d29922; --low: #8b949e; --ok: #3fb950;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  h1 { margin: 0; font-size: 22px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 28px 0 10px; }
+  .live { color: var(--muted); font-size: 13px; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok);
+         margin-right: 6px; animation: pulse 1.6s infinite; }
+  .dot.down { background: var(--high); animation: none; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 20px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+  .card .n { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .card .l { color: var(--muted); font-size: 13px; }
+  form { display: flex; gap: 8px; flex-wrap: wrap; }
+  input { flex: 1; min-width: 200px; background: var(--panel); border: 1px solid var(--line); color: var(--text);
+          border-radius: 6px; padding: 9px 12px; font: inherit; }
+  button { background: var(--accent); color: #0d1117; border: 0; border-radius: 6px; padding: 9px 18px;
+           font: inherit; font-weight: 600; cursor: pointer; }
+  #verdict { margin-top: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+             padding: 12px 16px; display: none; }
+  .wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+  tr:last-child td { border-bottom: 0; }
+  .domain { font-family: ui-monospace, Menlo, monospace; word-break: break-all; }
+  .badge { display: inline-block; min-width: 38px; text-align: center; padding: 2px 8px; border-radius: 999px;
+           font-weight: 600; font-size: 13px; color: #0d1117; }
+  .high { background: var(--high); } .medium { background: var(--medium); }
+  .low, .none { background: var(--low); }
+  ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
+  .time { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .empty { color: var(--muted); text-align: center; padding: 28px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>PhishGuard</h1>
+    <span class="live"><span class="dot" id="dot"></span><span id="status">connecting…</span></span>
+  </header>
+
+  <div class="cards">
+    <div class="card"><div class="n" id="processed">–</div><div class="l">domains scanned</div></div>
+    <div class="card"><div class="n" id="rate">–</div><div class="l">domains / second</div></div>
+    <div class="card"><div class="n" id="total">–</div><div class="l">suspicious domains</div></div>
+    <div class="card"><div class="n" id="high">–</div><div class="l">high severity</div></div>
+    <div class="card"><div class="n" id="top">–</div><div class="l">most targeted brand</div></div>
+  </div>
+
+  <h2>Check a domain</h2>
+  <form id="check">
+    <input id="domain" placeholder="e.g. leumi-secure-login.xyz" autocomplete="off" spellcheck="false" maxlength="253" required>
+    <button>Check</button>
+  </form>
+  <div id="verdict"></div>
+
+  <h2>Live detections</h2>
+  <div class="wrap">
+    <table>
+      <thead><tr><th>Score</th><th>Domain</th><th>Impersonates</th><th>Why</th><th>Seen</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="5" class="empty">Waiting for detections…</td></tr></tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+// Domain names are attacker-controlled input. They are only ever inserted
+// with textContent (never innerHTML) and never rendered as clickable links.
+const $ = id => document.getElementById(id);
+const el = (tag, cls, text) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+};
+const reasonList = reasons => {
+  const ul = el("ul");
+  reasons.forEach(r => ul.append(el("li", "", r)));
+  return ul;
+};
+
+async function refresh() {
+  try {
+    const [stats, list] = await Promise.all([
+      fetch("/api/stats").then(r => r.json()),
+      fetch("/api/detections?limit=50").then(r => r.json()),
+    ]);
+    $("processed").textContent = stats.processed.toLocaleString();
+    $("rate").textContent = stats.domains_per_second;
+    $("total").textContent = stats.detections.total.toLocaleString();
+    $("high").textContent = (stats.detections.by_severity.high || 0).toLocaleString();
+    $("top").textContent = Object.keys(stats.detections.by_brand)[0] || "–";
+    $("status").textContent = "live · source: " + stats.source;
+    $("dot").className = "dot";
+
+    const rows = $("rows");
+    rows.replaceChildren();
+    if (!list.length) {
+      const tr = el("tr"), td = el("td", "empty", "Waiting for detections…");
+      td.colSpan = 5;
+      tr.append(td);
+      rows.append(tr);
+    }
+    for (const d of list) {
+      const tr = el("tr");
+      const score = el("td"); score.append(el("span", "badge " + d.severity, d.score));
+      const why = el("td"); why.append(reasonList(d.reasons));
+      tr.append(score, el("td", "domain", d.domain), el("td", "", d.brand), why,
+                el("td", "time", new Date(d.first_seen).toLocaleTimeString()));
+      rows.append(tr);
+    }
+  } catch {
+    $("status").textContent = "disconnected";
+    $("dot").className = "dot down";
+  }
+}
+
+$("check").addEventListener("submit", async e => {
+  e.preventDefault();
+  const box = $("verdict");
+  const r = await fetch("/api/check?domain=" + encodeURIComponent($("domain").value.trim()));
+  box.replaceChildren();
+  box.style.display = "block";
+  if (!r.ok) { box.textContent = "Invalid domain."; return; }
+  const d = await r.json();
+  const head = el("div");
+  head.append(el("span", "badge " + d.severity, d.score), " ",
+              el("span", "domain", d.domain),
+              d.score ? " — may impersonate " + d.brand : " — no impersonation found");
+  box.append(head);
+  if (d.reasons.length) box.append(reasonList(d.reasons));
+});
+
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>
