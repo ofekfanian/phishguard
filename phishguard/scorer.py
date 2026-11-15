@@ -5,7 +5,8 @@ so an analyst can see why a domain was flagged.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from datetime import date
 
 import tldextract
 from rapidfuzz.distance import Levenshtein
@@ -57,6 +58,31 @@ def severity_for(score: int) -> str:
     if score > 0:
         return "low"
     return "none"
+
+
+def apply_domain_age(result: ScoreResult, registered_on: date | None,
+                     today: date | None = None) -> ScoreResult:
+    """Adjust a score by how long the domain has existed.
+
+    Phishing domains are usually days or weeks old. A domain that has been
+    registered for years is much more likely to be a coincidence.
+    """
+    if registered_on is None or result.score == 0:
+        return result
+    days = ((today or date.today()) - registered_on).days
+    if days < 0:
+        return result
+    if days <= 30:
+        change, note = 15, f"Registered only {days} day(s) ago"
+    elif days <= 365:
+        change, note = 0, f"Registered {days} days ago"
+    elif days <= 730:
+        change, note = -10, "Registered more than a year ago"
+    else:
+        change, note = -20, f"Registered {days // 365} years ago"
+    score = max(0, min(100, result.score + change))
+    return replace(result, score=score, severity=severity_for(score),
+                   reasons=result.reasons + [f"{note} ({registered_on.isoformat()})"])
 
 
 def score_domain(hostname: str) -> ScoreResult:

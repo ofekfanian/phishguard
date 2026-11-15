@@ -23,6 +23,7 @@ Certificate Transparency logs    ──►  Scorer  ──►  Database  ──�
 | `phishguard/ct.py` | Live feed: follows public CT logs and parses each new certificate |
 | `phishguard/sources.py` | Other feeds: a simulated demo feed and a CertStream client |
 | `phishguard/scorer.py` | The detection engine. Every point in the score has a written reason |
+| `phishguard/enrich.py` | Looks up each candidate's registration date over RDAP |
 | `phishguard/pipeline.py` | De-duplicates domains, scores them, saves one detection per registered domain |
 | `phishguard/store.py` | Database layer (SQLAlchemy) |
 | `phishguard/api.py` | REST API and dashboard |
@@ -40,9 +41,19 @@ Certificate Transparency logs    ──►  Scorer  ──►  Database  ──�
 | Phishing keywords (`login`, `verify`, `secure`...) | | +15 to +25 |
 | TLD common in phishing | `.xyz`, `.top` | +15 |
 | Punycode | `xn--pypal-4ve.com` | +10 |
+| Domain registered in the last 30 days | | +15 |
+| Domain registered more than 1 / 2 years ago | | -10 / -20 |
 
 A domain is saved as a detection at 50 points or more. A brand name alone (40) is
 deliberately below that, which keeps `mizrahi-family.com` out of the results.
+
+### Domain age
+
+Phishing domains are usually days old. For every domain that scores 35 or more,
+PhishGuard asks the domain registry (over RDAP) when it was registered, and adjusts
+the score. This is what separates `out1ooks.com` (registered months ago, kept) from
+`playpal.uk` (registered in 2023, dropped). The lookup is skipped for TLDs that have
+no RDAP server, such as `.il` and `.de`.
 
 ## Run it
 
@@ -87,6 +98,7 @@ but that mode has not been tested against a real server.
 | `PHISHGUARD_CERTSTREAM_URL` | `ws://localhost:8080/domains-only` | CertStream WebSocket URL |
 | `PHISHGUARD_DB` | `sqlite:///phishguard.db` | Any SQLAlchemy database URL |
 | `PHISHGUARD_THRESHOLD` | `50` | Minimum score to save a detection |
+| `PHISHGUARD_ENRICH` | `1` in live mode, `0` in demo | Look up domain age over RDAP |
 
 ## API
 
@@ -101,7 +113,8 @@ but that mode has not been tested against a real server.
 
 - Domain names are attacker-controlled input. The dashboard inserts them as text
   only, never as HTML and never as clickable links.
-- PhishGuard is passive: it reads public logs and never connects to a suspicious site.
+- PhishGuard is passive: it reads public logs and registry records, and never connects
+  to a suspicious site.
 
 ## Roadmap
 
@@ -109,7 +122,8 @@ but that mode has not been tested against a real server.
 - [x] Live mode: read CT logs directly
 - [x] Read the newer tiled CT logs (static-ct-api), where Let's Encrypt certificates are logged
 - [ ] Tune the scores and the list of official domains on real data
-- [ ] Enrichment: DNS records, domain age (RDAP), hosting provider
+- [x] Enrichment: domain age (RDAP)
+- [ ] Enrichment: DNS records, hosting provider
 - [ ] Cross-check detections with URLhaus and Google Safe Browsing
 - [ ] Alerts (Telegram or email) for high-severity detections
 - [ ] PostgreSQL, Docker Compose, GitHub Actions CI

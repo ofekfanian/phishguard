@@ -1,9 +1,9 @@
 """Database layer. SQLite by default; any SQLAlchemy URL (e.g. PostgreSQL) works."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from sqlalchemy import JSON, DateTime, Integer, String, create_engine, func, select
+from sqlalchemy import JSON, DateTime, Integer, String, create_engine, func, inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
@@ -26,6 +26,7 @@ class Detection(Base):
     reasons: Mapped[list] = mapped_column(JSON)
     source: Mapped[str] = mapped_column(String(20))
     first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    registered_on: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
     def to_dict(self) -> dict:
         return {
@@ -38,6 +39,7 @@ class Detection(Base):
             "reasons": self.reasons,
             "source": self.source,
             "first_seen": self.first_seen.replace(tzinfo=timezone.utc).isoformat(),
+            "registered_on": self.registered_on,
         }
 
 
@@ -46,8 +48,12 @@ class Store:
         args = {"check_same_thread": False} if url.startswith("sqlite") else {}
         self.engine = create_engine(url, connect_args=args)
         Base.metadata.create_all(self.engine)
+        # Databases created before this column existed get it added here.
+        if "registered_on" not in {c["name"] for c in inspect(self.engine).get_columns("detections")}:
+            with self.engine.begin() as connection:
+                connection.execute(text("ALTER TABLE detections ADD COLUMN registered_on VARCHAR(10)"))
 
-    def save(self, result: ScoreResult, source: str) -> bool:
+    def save(self, result: ScoreResult, source: str, registered_on: date | None = None) -> bool:
         """Save a detection. Returns False if this domain was already saved."""
         with Session(self.engine) as session:
             session.add(Detection(
@@ -59,6 +65,7 @@ class Store:
                 reasons=result.reasons,
                 source=source,
                 first_seen=datetime.now(timezone.utc),
+                registered_on=registered_on.isoformat() if registered_on else None,
             ))
             try:
                 session.commit()
