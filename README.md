@@ -1,5 +1,7 @@
 # PhishGuard
 
+[![Tests](https://github.com/ofekfanian/phishguard/actions/workflows/tests.yml/badge.svg)](https://github.com/ofekfanian/phishguard/actions/workflows/tests.yml)
+
 Real-time detection of phishing domains that impersonate protected brands.
 
 Every HTTPS certificate issued anywhere in the world is recorded in public
