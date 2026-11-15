@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 
 from . import config
 from .ct import ct_source
+from .enrich import RdapClient
 from .pipeline import Pipeline
 from .scorer import score_domain
 from .sources import certstream_source, demo_source
@@ -25,7 +26,10 @@ async def lifespan(app: FastAPI):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     source_name = config.source()
     store = Store(config.database_url())
-    pipeline = Pipeline(store, config.threshold(), source_name)
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # one line per request is too noisy
+    rdap = RdapClient() if config.enrich() else None
+    pipeline = Pipeline(store, config.threshold(), source_name,
+                        age_lookup=rdap.registered_on if rdap else None)
     app.state.store, app.state.pipeline = store, pipeline
 
     task = None
@@ -38,6 +42,8 @@ async def lifespan(app: FastAPI):
     yield
     if task:
         task.cancel()
+    if rdap:
+        await rdap.close()
 
 
 app = FastAPI(

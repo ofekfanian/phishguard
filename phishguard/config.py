@@ -62,3 +62,9 @@ def database_url() -> str:
 def threshold() -> int:
     """Minimum score for a domain to be saved as a detection."""
     return int(os.getenv("PHISHGUARD_THRESHOLD", "50"))
+
+
+def enrich() -> bool:
+    """Look up domain age for candidates. Off for the demo feed, whose domains are made up."""
+    default = "0" if source() in ("demo", "none") else "1"
+    return os.getenv("PHISHGUARD_ENRICH", default) == "1"
