@@ -80,6 +80,9 @@ def apply_domain_age(result: ScoreResult, registered_on: date | None,
         change, note = -10, "Registered more than a year ago"
     else:
         change, note = -20, f"Registered {days // 365} years ago"
+    # Swapped characters are deliberate at any age, so age never lowers that score.
+    if change < 0 and any(r.startswith("Lookalike characters") for r in result.reasons):
+        change = 0
     score = max(0, min(100, result.score + change))
     return replace(result, score=score, severity=severity_for(score),
                    reasons=result.reasons + [f"{note} ({registered_on.isoformat()})"])
@@ -137,6 +140,10 @@ def _skeletons(token: str) -> set[str]:
         out.add(s)
         for pair, letter in _LETTER_PAIRS:
             out.add(s.replace(pair, letter))
+    # A lowercase "l" and an uppercase "I" look the same in most fonts.
+    for s in list(out):
+        out.add(s.replace("l", "i"))
+        out.add(s.replace("i", "l"))
     return out
 
 
@@ -163,7 +170,9 @@ def _brand_signals(brand: Brand, host: str, domain_tokens: list[str],
                 for t in tokens:
                     edits = Levenshtein.distance(t, kw)
                     if len(t) >= 5 and 0 < edits <= max_edits:
-                        points, why = 50, f"Typosquatting: '{t}' is {edits} edit(s) away from '{kw}'"
+                        # Below the threshold on its own: many real words are one
+                        # or two letters away from a brand ("playpal", "microsport").
+                        points, why = 45, f"Typosquatting: '{t}' is {edits} edit(s) away from '{kw}'"
                         break
         if points > best:
             best, reason = points, why
@@ -173,7 +182,7 @@ def _brand_signals(brand: Brand, host: str, domain_tokens: list[str],
 
     reasons = [reason]
     for official in brand.official_domains:
-        if official in host:
+        if f".{official}." in f".{host}.":  # whole labels, not "theoutlook.com.ua"
             best += 20
             reasons.append(f"Embeds the real domain '{official}' to look legitimate")
             break

@@ -75,3 +75,27 @@ def test_brand_hidden_inside_longer_word():
 
 def test_brands_internal_domains_are_not_flagged():
     assert score_domain("auto-s1-pbi-kv-zone.z1.w.api.fabric.microsoft-int.com").score == 0
+
+
+# --- Cases found while running on live Certificate Transparency data ---
+
+def test_l_and_i_are_lookalikes():
+    result = score_domain("mlcros0ft.com")
+    assert result.brand == "Microsoft"
+    assert any("Lookalike" in r for r in result.reasons)
+    assert score_domain("paypai-login.com").brand == "PayPal"
+
+
+@pytest.mark.parametrize("domain", ["playpal.uk", "microsport.gr", "www.microot.app"])
+def test_a_typo_alone_is_below_threshold(domain):
+    assert 0 < score_domain(domain).score < THRESHOLD
+
+
+def test_typo_with_supporting_evidence_is_detected():
+    assert score_domain("paypol-login.com").score >= THRESHOLD
+
+
+def test_official_domain_must_match_whole_labels():
+    result = score_domain("theoutlook.com.ua")
+    assert not any("Embeds the real domain" in r for r in result.reasons)
+    assert result.score < THRESHOLD
