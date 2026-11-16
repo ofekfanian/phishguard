@@ -63,13 +63,11 @@ as a typo of "microsoft". Each one was fixed and is covered by a regression test
 
 ```mermaid
 flowchart LR
-    A[CT logs<br>RFC 6962 + tiled] --> B[Certificate parser]
-    B --> C[De-duplication]
-    C --> D[Scoring engine]
-    D -->|score 35 or more| E[RDAP<br>domain age]
-    E --> F[(Database)]
-    F --> G[REST API]
-    G --> H[Dashboard]
+    A[CT logs] --> B[Parse and<br>de-duplicate]
+    B --> C[Score]
+    C --> D[Domain age<br>RDAP]
+    D --> E[(Database)]
+    E --> F[API and<br>dashboard]
 ```
 
 | Module | Role |
