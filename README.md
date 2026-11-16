@@ -13,6 +13,24 @@ Example: `leumi.co.il.verify-account.top` scores 100/100 because it embeds the
 bank's real domain as a subdomain of an unrelated one, uses phishing keywords, and
 sits on a TLD that is common in phishing campaigns.
 
+![PhishGuard dashboard running on live data](docs/dashboard.jpg)
+
+## Results on live data
+
+In its first hours on live Certificate Transparency logs (about 140,000 domains in
+the first 42 minutes alone), PhishGuard flagged two lookalike domains:
+
+| Domain | Reads as | Registered |
+| --- | --- | --- |
+| `out1ooks.com` | outlook | April 2026 |
+| `mlcros0ft.com` | microsoft | January 2020 |
+
+Whether these domains are used for phishing was not verified: PhishGuard never
+visits a flagged site.
+
+The same run exposed three scoring problems, such as `microsport.gr` being flagged
+as a typo of "microsoft". Each one was fixed and is covered by a regression test.
+
 ## How it works
 
 ```
@@ -35,8 +53,8 @@ Certificate Transparency logs    ──►  Scorer  ──►  Database  ──�
 
 | Signal | Example | Points |
 | --- | --- | --- |
-| Lookalike characters (digits, Cyrillic/Greek letters, `rn` for `m`) | `paypa1.com`, `rnicrosoft.com` | 55 |
-| Typosquatting (edit distance) | `paypol.com` | 50 |
+| Lookalike characters (digits, `l` for `i`, Cyrillic/Greek letters, `rn` for `m`) | `paypa1.com`, `mlcros0ft.com` | 55 |
+| Typosquatting (edit distance) | `paypol.com` | 45 |
 | Brand name in a domain the brand does not own | `leumi-login.com` | 40 |
 | Brand name hidden inside a longer word | `myleumionline.com` | 35 |
 | Real domain embedded as a subdomain | `leumi.co.il.evil.top` | +20 |
@@ -44,10 +62,11 @@ Certificate Transparency logs    ──►  Scorer  ──►  Database  ──�
 | TLD common in phishing | `.xyz`, `.top` | +15 |
 | Punycode | `xn--pypal-4ve.com` | +10 |
 | Domain registered in the last 30 days | | +15 |
-| Domain registered more than 1 / 2 years ago | | -10 / -20 |
+| Domain registered more than 1 / 2 years ago (never applied to lookalike characters) | | -10 / -20 |
 
-A domain is saved as a detection at 50 points or more. A brand name alone (40) is
-deliberately below that, which keeps `mizrahi-family.com` out of the results.
+A domain is saved as a detection at 50 points or more. A brand name alone (40) or a
+typo alone (45) is deliberately below that, which keeps `mizrahi-family.com` and
+`microsport.gr` out of the results.
 
 ### Domain age
 

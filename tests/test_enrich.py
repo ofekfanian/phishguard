@@ -40,8 +40,16 @@ def test_new_domain_scores_higher():
 def test_old_domain_scores_lower():
     before = score_domain("playpal.uk")
     after = apply_domain_age(before, date(2023, 8, 15), TODAY)
-    assert before.score == 50 and after.score == 30
+    assert before.score == 45 and after.score == 25
     assert any("3 years ago" in r for r in after.reasons)
+
+
+def test_age_never_lowers_a_lookalike_score():
+    # Seen on live data: registered years ago, but "mlcros0ft" is no accident.
+    before = score_domain("mlcros0ft.com")
+    after = apply_domain_age(before, date(2020, 1, 1), TODAY)
+    assert before.score == after.score == 55
+    assert any("6 years ago" in r for r in after.reasons)
 
 
 def test_unknown_age_changes_nothing():
